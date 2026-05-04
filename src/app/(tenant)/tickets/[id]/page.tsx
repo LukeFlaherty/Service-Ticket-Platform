@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { requireOrg } from "@/lib/session";
-import { getTicket } from "@/server/queries/tickets";
-import { updateTicketStatus } from "@/server/actions/tickets";
+import { getTicket, getComments } from "@/server/queries/tickets";
 import { formatDateTime } from "@/lib/utils";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, MapPin, Wrench, Clock, Home, KeyRound } from "lucide-react";
+import { TicketSidebar } from "@/components/tickets/ticket-sidebar";
+import { CommentThread } from "@/components/tickets/comment-thread";
 
 export const dynamic = "force-dynamic";
 
@@ -14,13 +15,19 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `Ticket ${id.slice(0, 8)}` };
 }
 
-const STATUS_OPTIONS = ["open", "in_progress", "pending", "resolved", "closed"] as const;
-const PRIORITY_STYLES: Record<string, string> = {
-  low: "bg-zinc-100 text-zinc-600",
-  medium: "bg-blue-100 text-blue-700",
-  high: "bg-orange-100 text-orange-700",
-  urgent: "bg-red-100 text-red-700",
-};
+function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+  return (
+    <div className="flex gap-3">
+      <div className="mt-0.5 shrink-0 text-zinc-400">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div>
+        <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide">{label}</p>
+        <p className="text-sm text-zinc-700 mt-0.5">{value}</p>
+      </div>
+    </div>
+  );
+}
 
 export default async function TicketDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -32,85 +39,128 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ i
     redirect("/sign-in");
   }
 
-  const { org } = orgData!;
+  const { org, user } = orgData!;
   const ticket = await getTicket(org.id, id);
   if (!ticket) notFound();
 
+  const comments = await getComments(org.id, id);
+  const cf = (ticket.customFields ?? {}) as Record<string, string>;
+
+  const serviceAddress = cf.serviceAddress as string | undefined;
+  const serviceType = cf.serviceType as string | undefined;
+  const propertyType = cf.propertyType as string | undefined;
+  const accessInstructions = cf.accessInstructions as string | undefined;
+  const urgency = cf.urgency as string | undefined;
+  const preferredWindow = cf.preferredWindow as string | undefined;
+
+  const hasCustomFields = serviceAddress || serviceType || propertyType || accessInstructions || preferredWindow;
+
   return (
-    <div className="max-w-3xl space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href="/tickets" className="text-zinc-400 hover:text-zinc-900">
+    <div className="max-w-4xl space-y-6">
+      {/* Header */}
+      <div className="flex items-start gap-3">
+        <Link href="/tickets" className="mt-1 text-zinc-400 hover:text-zinc-900 shrink-0">
           <ArrowLeft className="h-4 w-4" />
         </Link>
-        <span className="text-sm text-zinc-400 font-mono">#{ticket.number}</span>
-        <h1 className="text-xl font-semibold">{ticket.title}</h1>
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-zinc-400 font-mono">#{ticket.number}</span>
+            {serviceType && (
+              <span className="rounded-full bg-indigo-100 text-indigo-700 px-2 py-0.5 text-xs font-medium">
+                {serviceType}
+              </span>
+            )}
+          </div>
+          <h1 className="text-xl font-semibold mt-0.5">{ticket.title}</h1>
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        {/* Main info */}
-        <div className="col-span-2 space-y-4">
-          <div className="rounded-xl border bg-white p-5 shadow-sm space-y-3">
-            <h2 className="text-sm font-medium text-zinc-500">Description</h2>
-            <p className="text-sm text-zinc-700 whitespace-pre-wrap">
-              {ticket.description ?? <span className="text-zinc-400">No description provided.</span>}
-            </p>
-          </div>
+      <div className="grid grid-cols-3 gap-6">
+        {/* Main content */}
+        <div className="col-span-2 space-y-5">
+
+          {/* Home services detail card */}
+          {hasCustomFields && (
+            <div className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
+              <h2 className="text-sm font-semibold text-zinc-700">Job Details</h2>
+              <div className="grid grid-cols-2 gap-4">
+                {serviceAddress && (
+                  <InfoRow icon={MapPin} label="Service Address" value={serviceAddress} />
+                )}
+                {propertyType && (
+                  <InfoRow icon={Home} label="Property Type" value={propertyType} />
+                )}
+                {serviceType && (
+                  <InfoRow icon={Wrench} label="Service Type" value={serviceType} />
+                )}
+                {(urgency || preferredWindow) && (
+                  <InfoRow
+                    icon={Clock}
+                    label="Scheduling"
+                    value={[urgency, preferredWindow].filter(Boolean).join(" · ")}
+                  />
+                )}
+                {accessInstructions && (
+                  <div className="col-span-2">
+                    <InfoRow icon={KeyRound} label="Access Instructions" value={accessInstructions} />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Customer contact */}
+          {(ticket.customerName || ticket.customerEmail || ticket.customerPhone) && (
+            <div className="rounded-xl border bg-white p-5 shadow-sm space-y-2">
+              <h2 className="text-sm font-semibold text-zinc-700">Customer</h2>
+              {ticket.customerName && <p className="text-sm font-medium">{ticket.customerName}</p>}
+              <div className="flex flex-wrap gap-4">
+                {ticket.customerPhone && (
+                  <a href={`tel:${ticket.customerPhone}`} className="text-sm text-indigo-600 hover:underline">
+                    {ticket.customerPhone}
+                  </a>
+                )}
+                {ticket.customerEmail && (
+                  <a href={`mailto:${ticket.customerEmail}`} className="text-sm text-indigo-600 hover:underline">
+                    {ticket.customerEmail}
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Problem description */}
+          {ticket.description && (
+            <div className="rounded-xl border bg-white p-5 shadow-sm space-y-2">
+              <h2 className="text-sm font-semibold text-zinc-700">Problem Description</h2>
+              <p className="text-sm text-zinc-700 whitespace-pre-wrap">{ticket.description}</p>
+            </div>
+          )}
+
+          <CommentThread
+            ticketId={ticket.id}
+            comments={comments}
+            currentUserName={user.name}
+          />
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-4">
-          <div className="rounded-xl border bg-white p-4 shadow-sm space-y-4">
-            <div>
-              <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1">Status</p>
-              <form>
-                <select
-                  name="status"
-                  defaultValue={ticket.status}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                  onChange={async (e) => {
-                    "use server";
-                    await updateTicketStatus(id, e.target.value as typeof STATUS_OPTIONS[number]);
-                  }}
-                >
-                  {STATUS_OPTIONS.map((s) => (
-                    <option key={s} value={s}>{s.replace("_", " ")}</option>
-                  ))}
-                </select>
-              </form>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1">Priority</p>
-              <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${PRIORITY_STYLES[ticket.priority]}`}>
-                {ticket.priority}
-              </span>
-            </div>
-
-            {ticket.customerName && (
-              <div>
-                <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1">Customer</p>
-                <p className="text-sm font-medium">{ticket.customerName}</p>
-                {ticket.customerEmail && (
-                  <p className="text-xs text-zinc-500">{ticket.customerEmail}</p>
-                )}
-                {ticket.customerPhone && (
-                  <p className="text-xs text-zinc-500">{ticket.customerPhone}</p>
-                )}
-              </div>
-            )}
-
-            <div>
-              <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1">Created</p>
-              <p className="text-xs text-zinc-600">{formatDateTime(ticket.createdAt)}</p>
-            </div>
-
-            {ticket.dueAt && (
-              <div>
-                <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1">Due</p>
-                <p className="text-xs text-zinc-600">{formatDateTime(ticket.dueAt)}</p>
-              </div>
-            )}
-          </div>
+        <div>
+          <TicketSidebar
+            ticketId={ticket.id}
+            status={ticket.status}
+            priority={ticket.priority}
+            customerName={ticket.customerName}
+            customerEmail={ticket.customerEmail}
+            customerPhone={ticket.customerPhone}
+            createdAt={ticket.createdAt}
+            dueAt={ticket.dueAt}
+          />
+          {ticket.dueAt && (
+            <p className="mt-3 text-center text-xs text-zinc-400">
+              Preferred: {formatDateTime(ticket.dueAt)}
+            </p>
+          )}
         </div>
       </div>
     </div>

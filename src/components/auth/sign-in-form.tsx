@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { signIn } from "@/lib/auth-client";
+import { signIn, authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +28,14 @@ export function SignInForm() {
       return;
     }
 
-    router.push("/dashboard");
+    // Auto-activate the user's first org so they don't land on onboarding
+    const { data: orgs } = await authClient.organization.list();
+    if (orgs && orgs.length > 0) {
+      await authClient.organization.setActive({ organizationId: orgs[0].id });
+      router.push("/dashboard");
+    } else {
+      router.push("/onboarding");
+    }
     router.refresh();
   };
 

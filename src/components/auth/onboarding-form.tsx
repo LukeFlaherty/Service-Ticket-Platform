@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,21 @@ export function OnboardingForm() {
   const [slug, setSlug] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  // If the user already has an org (e.g. returning after session expiry),
+  // activate it and skip onboarding entirely.
+  useEffect(() => {
+    authClient.organization.list().then(({ data: orgs }) => {
+      if (orgs && orgs.length > 0) {
+        authClient.organization
+          .setActive({ organizationId: orgs[0].id })
+          .then(() => router.replace("/dashboard"));
+      } else {
+        setChecking(false);
+      }
+    });
+  }, [router]);
 
   const handleNameChange = (v: string) => {
     setName(v);
@@ -32,12 +47,18 @@ export function OnboardingForm() {
       return;
     }
 
-    // Set it as the active org
     await authClient.organization.setActive({ organizationSlug: slug });
-
     router.push("/dashboard");
     router.refresh();
   };
+
+  if (checking) {
+    return (
+      <div className="flex items-center justify-center h-32">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900" />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-sm space-y-6">
@@ -54,7 +75,7 @@ export function OnboardingForm() {
           <Input
             id="org-name"
             type="text"
-            placeholder="Acme Corp"
+            placeholder="Acme Plumbing"
             value={name}
             onChange={(e) => handleNameChange(e.target.value)}
             required

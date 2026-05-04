@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { tickets } from "@/db/schema";
+import { tickets, ticketComments } from "@/db/schema";
 import { requireOrg } from "@/lib/session";
 import { createId } from "@paralleldrive/cuid2";
 import { eq, and, count } from "drizzle-orm";
@@ -16,6 +16,7 @@ const createTicketSchema = z.object({
   customerEmail: z.string().email().optional().or(z.literal("")),
   customerPhone: z.string().optional(),
   dueAt: z.string().optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type CreateTicketInput = z.infer<typeof createTicketSchema>;
@@ -45,6 +46,7 @@ export async function createTicket(input: CreateTicketInput) {
       customerEmail: data.customerEmail || null,
       customerPhone: data.customerPhone || null,
       dueAt: data.dueAt ? new Date(data.dueAt) : null,
+      customFields: data.customFields ?? {},
     })
     .returning();
 
@@ -78,6 +80,51 @@ export async function assignTicket(ticketId: string, assignedToId: string | null
     .update(tickets)
     .set({ assignedToId, updatedAt: new Date() })
     .where(and(eq(tickets.id, ticketId), eq(tickets.orgId, org.id)));
+
+  revalidatePath(`/tickets/${ticketId}`);
+}
+
+export async function updateTicketPriority(
+  ticketId: string,
+  priority: "low" | "medium" | "high" | "urgent"
+) {
+  const { org } = await requireOrg();
+
+  await db
+    .update(tickets)
+    .set({ priority, updatedAt: new Date() })
+    .where(and(eq(tickets.id, ticketId), eq(tickets.orgId, org.id)));
+
+  revalidatePath("/tickets");
+  revalidatePath(`/tickets/${ticketId}`);
+}
+
+const addCommentSchema = z.object({
+  ticketId: z.string().min(1),
+  body: z.string().min(1).max(4000),
+});
+
+export async function addComment(input: z.infer<typeof addCommentSchema>) {
+  const { user, org } = await requireOrg();
+  const { ticketId, body } = addCommentSchema.parse(input);
+
+  const [ticket] = await db
+    .select({ id: tickets.id })
+    .from(tickets)
+    .where(and(eq(tickets.id, ticketId), eq(tickets.orgId, org.id)))
+    .limit(1);
+
+  if (!ticket) throw new Error("Ticket not found");
+
+  await db.insert(ticketComments).values({
+    id: createId(),
+    ticketId,
+    orgId: org.id,
+    body,
+    authorId: user.id,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
 
   revalidatePath(`/tickets/${ticketId}`);
 }

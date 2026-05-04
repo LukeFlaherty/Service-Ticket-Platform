@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { tickets } from "@/db/schema";
-import { eq, and, desc, count } from "drizzle-orm";
+import { tickets, ticketComments, user } from "@/db/schema";
+import { eq, and, desc, count, asc } from "drizzle-orm";
 import { cache } from "react";
 
 export const getTickets = cache(
@@ -24,6 +24,22 @@ export const getTicket = cache(async (orgId: string, ticketId: string) => {
     .limit(1);
 
   return ticket ?? null;
+});
+
+export const getComments = cache(async (orgId: string, ticketId: string) => {
+  return db
+    .select({
+      id: ticketComments.id,
+      body: ticketComments.body,
+      authorId: ticketComments.authorId,
+      authorName: user.name,
+      isInternal: ticketComments.isInternal,
+      createdAt: ticketComments.createdAt,
+    })
+    .from(ticketComments)
+    .innerJoin(user, eq(ticketComments.authorId, user.id))
+    .where(and(eq(ticketComments.ticketId, ticketId), eq(ticketComments.orgId, orgId)))
+    .orderBy(asc(ticketComments.createdAt));
 });
 
 export const getTicketCounts = cache(async (orgId: string) => {

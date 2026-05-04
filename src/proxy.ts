@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { betterFetch } from "@better-fetch/fetch";
 import type { Session } from "@/lib/auth";
 
-const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/auth"];
+const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/auth", "/admin/login"];
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname.startsWith(p));
@@ -23,20 +23,25 @@ export default async function proxy(request: NextRequest) {
   });
 
   if (!session) {
-    return NextResponse.redirect(new URL("/sign-in", request.url));
+    const dest = isAdmin(pathname) ? "/admin/login" : "/sign-in";
+    return NextResponse.redirect(new URL(dest, request.url));
   }
 
-  // If authed but has no active org, send to onboarding
-  if (!session.session.activeOrganizationId && pathname !== "/onboarding") {
+  const isWaveAdmin = (session.user.email ?? "").endsWith("@waveconsulting.biz");
+
+  // If authed but has no active org, send to onboarding — unless they're an admin
+  if (!session.session.activeOrganizationId && pathname !== "/onboarding" && !isWaveAdmin) {
     return NextResponse.redirect(new URL("/onboarding", request.url));
   }
 
+  // Wave admins with no org should land on /admin, not tenant routes
+  if (isWaveAdmin && !session.session.activeOrganizationId && !isAdmin(pathname)) {
+    return NextResponse.redirect(new URL("/admin", request.url));
+  }
+
   // Internal admin panel — restrict to our company domain
-  if (isAdmin(pathname)) {
-    const email = session.user.email ?? "";
-    if (!email.endsWith("@waveconsulting.biz")) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
-    }
+  if (isAdmin(pathname) && !isWaveAdmin) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return NextResponse.next();
