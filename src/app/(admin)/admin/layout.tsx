@@ -10,6 +10,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <a href="/admin" className="block rounded px-3 py-2 hover:bg-zinc-800">
             Overview
           </a>
+          <a href="/admin/users" className="block rounded px-3 py-2 hover:bg-zinc-800">
+            Users
+          </a>
           <a href="/admin/orgs" className="block rounded px-3 py-2 hover:bg-zinc-800">
             Organizations
           </a>
