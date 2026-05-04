@@ -20,7 +20,12 @@ const baseLinks = [
   { href: "/team", label: "Team", icon: Users },
 ];
 
-const featureLinks: { href: string; label: string; icon: React.ElementType; featureId: FeatureId }[] = [
+const featureLinks: {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  featureId: FeatureId;
+}[] = [
   { href: "/vendors", label: "Vendors", icon: Building2, featureId: FEATURE_IDS.VENDOR_MANAGEMENT },
   { href: "/integrations", label: "Integrations", icon: Plug, featureId: FEATURE_IDS.GHL_INTEGRATION },
 ];
@@ -34,24 +39,17 @@ export function SideNav({ org, enabledFeatures }: SideNavProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="flex h-full w-56 flex-col border-r bg-white">
-      {/* Brand */}
-      <div className="flex items-center gap-2 p-4 border-b">
-        {org.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={org.logoUrl} alt={org.name} className="h-7 w-7 rounded object-cover" />
-        ) : (
-          <div
-            className="h-7 w-7 rounded flex items-center justify-center text-white text-xs font-bold"
-            style={{ backgroundColor: org.primaryColor ?? "#2563eb" }}
-          >
-            {org.name[0].toUpperCase()}
-          </div>
-        )}
+    <aside className="flex h-full w-56 flex-col border-r bg-white shrink-0">
+      <div className="flex items-center gap-2.5 p-4 border-b">
+        <div
+          className="h-7 w-7 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0"
+          style={{ backgroundColor: org.primaryColor ?? "#18181b" }}
+        >
+          {org.name[0].toUpperCase()}
+        </div>
         <span className="text-sm font-semibold truncate">{org.name}</span>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-0.5 text-sm">
         {baseLinks.map(({ href, label, icon: Icon }) => (
           <NavLink key={href} href={href} label={label} icon={Icon} active={pathname.startsWith(href)} />
@@ -65,7 +63,12 @@ export function SideNav({ org, enabledFeatures }: SideNavProps) {
       </nav>
 
       <div className="p-3 border-t">
-        <NavLink href="/settings" label="Settings" icon={Settings} active={pathname.startsWith("/settings")} />
+        <NavLink
+          href="/settings"
+          label="Settings"
+          icon={Settings}
+          active={pathname.startsWith("/settings")}
+        />
       </div>
     </aside>
   );

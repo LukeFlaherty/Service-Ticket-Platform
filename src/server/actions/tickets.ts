@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { tickets } from "@/db/schema";
-import { requireOrg } from "@/lib/auth";
+import { requireOrg } from "@/lib/session";
 import { createId } from "@paralleldrive/cuid2";
 import { eq, and, count } from "drizzle-orm";
 
@@ -21,7 +21,7 @@ const createTicketSchema = z.object({
 export type CreateTicketInput = z.infer<typeof createTicketSchema>;
 
 export async function createTicket(input: CreateTicketInput) {
-  const { org, userId } = await requireOrg();
+  const { org, user } = await requireOrg();
   const data = createTicketSchema.parse(input);
 
   // Get next sequential number for this org
@@ -40,7 +40,7 @@ export async function createTicket(input: CreateTicketInput) {
       description: data.description,
       priority: data.priority,
       status: "open",
-      createdById: userId,
+      createdById: user.id,
       customerName: data.customerName || null,
       customerEmail: data.customerEmail || null,
       customerPhone: data.customerPhone || null,

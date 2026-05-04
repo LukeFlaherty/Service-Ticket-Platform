@@ -1,37 +1,34 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { organization } from "better-auth/plugins";
 import { db } from "@/db";
-import { orgs } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { cache } from "react";
+import * as schema from "@/db/schema";
 
-/**
- * Gets the current user's active Clerk org and verifies it exists in our DB.
- * Throws if not authenticated or org not found.
- */
-export const requireOrg = cache(async () => {
-  const { userId, orgId } = await auth();
-
-  if (!userId) throw new Error("Unauthenticated");
-  if (!orgId) throw new Error("No active organization");
-
-  const [org] = await db.select().from(orgs).where(eq(orgs.id, orgId)).limit(1);
-  if (!org) throw new Error("Organization not found");
-
-  return { userId, org };
+export const auth = betterAuth({
+  database: drizzleAdapter(db, {
+    provider: "pg",
+    schema: {
+      user: schema.user,
+      session: schema.session,
+      account: schema.account,
+      verification: schema.verification,
+      organization: schema.organization,
+      member: schema.member,
+      invitation: schema.invitation,
+    },
+  }),
+  secret: process.env.BETTER_AUTH_SECRET!,
+  baseURL: process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL,
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: false,
+  },
+  plugins: [
+    organization({
+      allowUserToCreateOrganization: true,
+    }),
+  ],
 });
 
-export const requireUser = cache(async () => {
-  const user = await currentUser();
-  if (!user) throw new Error("Unauthenticated");
-  return user;
-});
-
-/**
- * Check if the current user has the "admin" role in their org (Clerk role).
- */
-export async function requireOrgAdmin() {
-  const { userId, orgId, orgRole } = await auth();
-  if (!userId || !orgId) throw new Error("Unauthenticated");
-  if (orgRole !== "org:admin") throw new Error("Forbidden: admin only");
-  return { userId, orgId };
-}
+export type Auth = typeof auth;
+export type Session = typeof auth.$Infer.Session;

@@ -1,36 +1,49 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { betterFetch } from "@better-fetch/fetch";
+import type { Session } from "@/lib/auth";
 
-const isPublicRoute = createRouteMatcher([
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/api/webhooks(.*)",
-]);
+const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/auth"];
 
-const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
+function isPublic(pathname: string) {
+  return PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+}
 
-export default clerkMiddleware(async (auth, req) => {
-  // Block unauthenticated access to protected routes
-  if (!isPublicRoute(req)) {
-    await auth.protect();
+function isAdmin(pathname: string) {
+  return pathname.startsWith("/admin");
+}
+
+export default async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (isPublic(pathname)) return NextResponse.next();
+
+  const { data: session } = await betterFetch<Session>("/api/auth/get-session", {
+    baseURL: request.nextUrl.origin,
+    headers: { cookie: request.headers.get("cookie") ?? "" },
+  });
+
+  if (!session) {
+    return NextResponse.redirect(new URL("/sign-in", request.url));
   }
 
-  // Internal admin panel requires our company email domain
-  // Additional checks can be added here (e.g. specific user IDs, metadata flags)
-  if (isAdminRoute(req)) {
-    const { sessionClaims } = await auth();
-    const email = sessionClaims?.email as string | undefined;
-    if (!email?.endsWith("@waveconsulting.biz")) {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
+  // If authed but has no active org, send to onboarding
+  if (!session.session.activeOrganizationId && pathname !== "/onboarding") {
+    return NextResponse.redirect(new URL("/onboarding", request.url));
+  }
+
+  // Internal admin panel — restrict to our company domain
+  if (isAdmin(pathname)) {
+    const email = session.user.email ?? "";
+    if (!email.endsWith("@waveconsulting.biz")) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    "/(api|trpc)(.*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
