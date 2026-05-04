@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { db } from "@/db";
+
+export const dynamic = "force-dynamic";
 import { orgs } from "@/db/schema";
 import { formatDate } from "@/lib/utils";
 

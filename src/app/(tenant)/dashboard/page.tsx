@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { requireOrg } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {

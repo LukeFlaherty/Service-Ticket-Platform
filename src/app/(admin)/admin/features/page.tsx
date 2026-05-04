@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { db } from "@/db";
+
+export const dynamic = "force-dynamic";
 import { features, orgFeatures, orgs } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
